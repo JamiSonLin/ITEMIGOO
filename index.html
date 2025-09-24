@@ -14,15 +14,15 @@
       import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
       
       // 替換為你的 Firebase 配置（從 Firebase Console 取得）
-     const firebaseConfig = {
-  apiKey: "AIzaSyDxJCKSvrB3a6tYtzV9Q90p68odxaqQcXw",
-  authDomain: "cabinet-sync-db.firebaseapp.com",
-  databaseURL: "https://cabinet-sync-db-default-rtdb.firebaseio.com",
-  projectId: "cabinet-sync-db",
-  storageBucket: "cabinet-sync-db.firebasestorage.app",
-  messagingSenderId: "209194186803",
-  appId: "1:209194186803:web:6498fd5c812ea419e5cb46"
-};
+      const firebaseConfig = {
+        apiKey: "AIzaSyDxJCKSvrB3a6tYtzV9Q90p68odxaqQcXw",
+        authDomain: "cabinet-sync-db.firebaseapp.com",
+        databaseURL: "https://cabinet-sync-db-default-rtdb.firebaseio.com",
+        projectId: "cabinet-sync-db",
+        storageBucket: "cabinet-sync-db.firebasestorage.app",
+        messagingSenderId: "209194186803",
+        appId: "1:209194186803:web:6498fd5c812ea419e5cb46"
+      };
       
       const app = initializeApp(firebaseConfig);
       const db = getDatabase(app);
@@ -250,16 +250,38 @@
                         return acc;
                     }, {})
                 };
+                console.log('載入資料成功:', data);
+                // 如果 Firebase 為空，將預設資料寫入
+                if (!snapshot.val()) {
+                    await set(ref(db, '/cabinetData'), data);
+                    console.log('已將預設資料寫入 Firebase');
+                }
                 // 遷移舊 localStorage（僅第一次）
                 const localData = JSON.parse(localStorage.getItem('cabinetApp') || '{}');
-                if (Object.keys(localData).length > 0 && Object.keys(data).length === 0) {
-                    await set(ref(db, '/cabinetData'), localData);
+                if (Object.keys(localData).length > 0 && !snapshot.val()) {
                     data = localData;
+                    await set(ref(db, '/cabinetData'), data);
                     localStorage.removeItem('cabinetApp');
+                    console.log('已遷移 localStorage 資料到 Firebase');
                 }
             } catch (error) {
-                console.error('載入失敗:', error);
-                data = { locations: {} };
+                console.error('載入資料失敗:', error);
+                // 使用預設地點初始化
+                data = {
+                    locations: defaultLocations.reduce((acc, loc) => {
+                        const locId = loc.name.toLowerCase().replace(/\s/g, '-');
+                        acc[locId] = {
+                            name: loc.name,
+                            areas: loc.areas.reduce((areaAcc, areaName) => {
+                                const areaId = areaName.toLowerCase().replace(/\s/g, '-');
+                                areaAcc[areaId] = { name: areaName, cabinets: {} };
+                                return areaAcc;
+                            }, {})
+                        };
+                        return acc;
+                    }, {})
+                };
+                console.log('已初始化預設資料:', data);
             }
         }
 
@@ -267,6 +289,7 @@
         async function saveData() {
             try {
                 await set(ref(db, '/cabinetData'), data);
+                console.log('資料儲存成功');
             } catch (error) {
                 console.error('儲存失敗:', error);
             }
@@ -277,6 +300,7 @@
             const updatedData = snapshot.val();
             if (updatedData && JSON.stringify(updatedData) !== JSON.stringify(data)) {
                 data = updatedData;
+                console.log('資料已同步:', data);
                 if (currentCabinetId) renderCells();
                 else if (currentAreaId) renderCabinets();
                 else if (currentLocationId) renderAreasPage();
@@ -285,14 +309,21 @@
         });
 
         function renderLocationsPage() {
+            console.log('渲染地點頁面，當前資料:', data);
             document.getElementById('locationsPage').classList.remove('hidden');
             document.getElementById('areasPage').classList.add('hidden');
             document.getElementById('cabinetsPage').classList.add('hidden');
             document.getElementById('cellsPage').classList.add('hidden');
             document.getElementById('addAreaBtn').classList.add('hidden');
             const container = document.getElementById('locationsPage');
-            container.innerHTML = `<button id="backToLocations" class="mb-4 px-4 py-2 bg-secondary text-white rounded-lg hidden">返回地點</button>` + 
-                Object.entries(data.locations).map(([id, loc]) => `
+            container.innerHTML = `<button id="backToLocations" class="mb-4 px-4 py-2 bg-secondary text-white rounded-lg hidden">返回地點</button>`;
+
+            if (!data.locations || Object.keys(data.locations).length === 0) {
+                container.innerHTML += `<p class="text-gray-500">目前無地點，請點擊「新增地點」按鈕</p>`;
+                return;
+            }
+
+            container.innerHTML += Object.entries(data.locations).map(([id, loc]) => `
                 <div class="bg-white p-4 rounded-lg shadow-md cursor-pointer hover:shadow-lg" onclick="enterLocation('${id}')">
                     <h3 class="text-lg font-medium">${loc.name}</h3>
                     <button onclick="editLocation('${id}', event)" class="float-right text-secondary hover:text-primary">
@@ -331,9 +362,15 @@
             document.getElementById('addAreaBtn').classList.remove('hidden');
             document.getElementById('currentArea').textContent = '';
             const container = document.getElementById('areasPage');
-            const areas = data.locations[currentLocationId].areas;
-            container.innerHTML = `<button id="backToLocations" class="mb-4 px-4 py-2 bg-secondary text-white rounded-lg">返回地點</button>` + 
-                Object.entries(areas).map(([id, area]) => `
+            const areas = data.locations[currentLocationId]?.areas || {};
+            container.innerHTML = `<button id="backToLocations" class="mb-4 px-4 py-2 bg-secondary text-white rounded-lg">返回地點</button>`;
+            
+            if (Object.keys(areas).length === 0) {
+                container.innerHTML += `<p class="text-gray-500">目前無區域，請點擊「新增區域」按鈕</p>`;
+                return;
+            }
+
+            container.innerHTML += Object.entries(areas).map(([id, area]) => `
                 <div class="bg-white p-4 rounded-lg shadow-md cursor-pointer hover:shadow-lg" onclick="enterArea('${id}')">
                     <h3 class="text-lg font-medium">${area.name}</h3>
                     <button onclick="editArea('${id}', event)" class="float-right text-secondary hover:text-primary">
@@ -355,17 +392,19 @@
         }
 
         function renderCabinets() {
-            const cabinets = data.locations[currentLocationId].areas[currentAreaId].cabinets;
+            const cabinets = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets || {};
             const container = document.getElementById('cabinetsGrid');
-            container.innerHTML = Object.entries(cabinets).map(([id, cab]) => `
-                <div class="bg-white p-4 rounded-lg shadow-md">
-                    <h3 class="text-lg font-medium">${cab.name}</h3>
-                    <p class="text-sm text-secondary">類型: ${cab.type}</p>
-                    <button onclick="enterCabinet('${id}')" class="mt-2 px-3 py-1 bg-primary text-white rounded">查看</button>
-                    <button onclick="editCabinet('${id}', event)" class="mt-2 px-3 py-1 bg-accent text-white rounded ml-2">編輯</button>
-                    <button onclick="deleteCabinet('${id}', event)" class="mt-2 px-3 py-1 bg-red-500 text-white rounded ml-2">刪除</button>
-                </div>
-            `).join('');
+            container.innerHTML = Object.keys(cabinets).length === 0
+                ? `<p class="text-gray-500">目前無櫃體，請點擊「新增櫃體」按鈕</p>`
+                : Object.entries(cabinets).map(([id, cab]) => `
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <h3 class="text-lg font-medium">${cab.name}</h3>
+                        <p class="text-sm text-secondary">類型: ${cab.type}</p>
+                        <button onclick="enterCabinet('${id}')" class="mt-2 px-3 py-1 bg-primary text-white rounded">查看</button>
+                        <button onclick="editCabinet('${id}', event)" class="mt-2 px-3 py-1 bg-accent text-white rounded ml-2">編輯</button>
+                        <button onclick="deleteCabinet('${id}', event)" class="mt-2 px-3 py-1 bg-red-500 text-white rounded ml-2">刪除</button>
+                    </div>
+                `).join('');
         }
 
         function editCabinet(cabId, event) {
@@ -430,8 +469,12 @@
         }
 
         function renderCells() {
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-            let sizeStr = cab.dimensions.size ? cab.dimensions.size.toLowerCase() : '3x3';
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) {
+                console.error('櫃體不存在:', currentCabinetId);
+                return;
+            }
+            let sizeStr = cab.dimensions?.size ? cab.dimensions.size.toLowerCase() : '3x3';
             const dimensions = sizeStr.split('x');
             const rows = parseInt(dimensions[0]) || 3;
             const cols = parseInt(dimensions[1]) || 3;
@@ -444,8 +487,8 @@
                 for (let j = 0; j < cols; j++) {
                     const cellId = `${i}-${j}`;
                     if (renderedCells.has(cellId)) continue;
-                    const cellData = cab.cells_data[cellId] || { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
-                    const items = cellData.items;
+                    const cellData = cab.cells_data?.[cellId] || { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
+                    const items = cellData.items || [];
                     const bgColor = items.some(item => isExpiringSoon(item.expiryDate)) ? 'bg-accent' : 'bg-gray-100';
                     const cell = document.createElement('div');
                     cell.className = `grid-cell p-2 ${bgColor} rounded text-xs ${cellData.merged ? 'merged' : ''} ${selectedCells.includes(cellId) ? 'selected' : ''}`;
@@ -472,8 +515,9 @@
         }
 
         function selectCell(cellId, element) {
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-            const cellData = cab.cells_data[cellId] || { merged: false };
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) return;
+            const cellData = cab.cells_data?.[cellId] || { merged: false };
             if (editMode && cellData.merged) {
                 selectedCells = [cellId];
                 document.querySelectorAll('.grid-cell').forEach(cell => cell.classList.remove('selected'));
@@ -603,10 +647,14 @@
 
         function openItemModal(cellId) {
             currentCellId = cellId;
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) {
+                console.error('櫃體不存在:', currentCabinetId);
+                return;
+            }
             const cells = cab.cells_data || {};
             const cellData = cells[cellId] || { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
-            const items = cellData.items;
+            const items = cellData.items || [];
             document.getElementById('modalTitle').textContent = `儲存格 ${cellId}`;
             const list = document.getElementById('itemsList');
             list.innerHTML = items.map((item, idx) => `
@@ -635,8 +683,10 @@
         }
 
         function editItem(index) {
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-            const item = cab.cells_data[currentCellId].items[index];
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) return;
+            const item = cab.cells_data[currentCellId]?.items[index];
+            if (!item) return;
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemQty').value = item.quantity || '';
             document.getElementById('itemInDate').value = item.entryDate || '';
@@ -650,10 +700,12 @@
         async function removeImage(index) {
             if (confirm('確定要刪除這張照片嗎？物品其他資訊將保留。')) {
                 const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-                const item = cab.cells_data[currentCellId].items[index];
-                item.image = '';
-                await saveData();
-                openItemModal(currentCellId);
+                const item = cab.cells_data[currentCellId]?.items[index];
+                if (item) {
+                    item.image = '';
+                    await saveData();
+                    openItemModal(currentCellId);
+                }
             }
         }
 
@@ -678,16 +730,17 @@
                 return;
             }
             const imageInput = document.getElementById('itemImage');
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) return;
             if (!cab.cells_data) cab.cells_data = {};
             if (!cab.cells_data[currentCellId]) {
                 cab.cells_data[currentCellId] = { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
             }
             const cell = cab.cells_data[currentCellId];
-            const items = cell.items;
+            const items = cell.items || [];
             const processItem = async (newImage) => {
                 if (newImage) item.image = newImage;
-                else if (editingItemIndex > -1) item.image = items[editingItemIndex].image;
+                else if (editingItemIndex > -1) item.image = items[editingItemIndex]?.image || '';
                 if (editingItemIndex > -1) {
                     items[editingItemIndex] = item;
                 } else {
@@ -714,7 +767,8 @@
 
         async function deleteItem(index) {
             if (confirm('確定要刪除這個物品嗎？')) {
-                const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
+                const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+                if (!cab || !cab.cells_data[currentCellId]) return;
                 cab.cells_data[currentCellId].items.splice(index, 1);
                 if (cab.cells_data[currentCellId].items.length === 0) {
                     cab.cells_data[currentCellId].text = '';
@@ -730,8 +784,9 @@
         }
 
         async function sortItems(field) {
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-            const items = cab.cells_data[currentCellId]?.items || [];
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab || !cab.cells_data[currentCellId]) return;
+            const items = cab.cells_data[currentCellId].items || [];
             items.sort((a, b) => {
                 let valA = a[field] || '';
                 let valB = b[field] || '';
@@ -749,30 +804,35 @@
             openItemModal(currentCellId);
         }
 
-        document.getElementById('addLocationBtn').onclick = () => {
+        document.getElementById('addLocationBtn').addEventListener('click', () => {
+            console.log('點擊新增地點按鈕');
             addModalType = 'location';
             document.getElementById('addTitle').textContent = '新增地點';
             document.getElementById('addInput').value = '';
+            document.getElementById('addInput').dataset.oldId = '';
             document.getElementById('cabinetType').classList.add('hidden');
             document.getElementById('dimensionsInputs').innerHTML = '';
             document.getElementById('deleteAdd').classList.add('hidden');
             document.getElementById('addModal').classList.remove('hidden');
-        };
+        });
 
-        document.getElementById('addAreaBtn').onclick = () => {
+        document.getElementById('addAreaBtn').addEventListener('click', () => {
+            console.log('點擊新增區域按鈕');
             addModalType = 'area';
             document.getElementById('addTitle').textContent = '新增區域';
             document.getElementById('addInput').value = '';
+            document.getElementById('addInput').dataset.oldId = '';
             document.getElementById('cabinetType').classList.add('hidden');
             document.getElementById('dimensionsInputs').innerHTML = '';
             document.getElementById('deleteAdd').classList.add('hidden');
             document.getElementById('addModal').classList.remove('hidden');
-        };
+        });
 
         function editArea(areaId, event) {
             event.stopPropagation();
             addModalType = 'area';
-            const area = data.locations[currentLocationId].areas[areaId];
+            const area = data.locations[currentLocationId]?.areas[areaId];
+            if (!area) return;
             document.getElementById('addTitle').textContent = '編輯區域';
             document.getElementById('addInput').value = area.name;
             document.getElementById('addInput').dataset.oldId = areaId;
@@ -782,21 +842,23 @@
             document.getElementById('addModal').classList.remove('hidden');
         }
 
-        document.getElementById('addCabinetBtn').onclick = () => {
+        document.getElementById('addCabinetBtn').addEventListener('click', () => {
+            console.log('點擊新增櫃體按鈕');
             addModalType = 'cabinet';
             editingCabinet = false;
             document.getElementById('addTitle').textContent = '新增櫃體';
             document.getElementById('addInput').value = '';
+            document.getElementById('addInput').dataset.oldId = '';
             document.getElementById('cabinetType').classList.remove('hidden');
             document.getElementById('deleteAdd').classList.add('hidden');
             document.getElementById('dimensionsInputs').innerHTML = '';
             document.getElementById('addModal').classList.remove('hidden');
             document.getElementById('cabinetType').onchange = () => updateDimensionsInputs();
             updateDimensionsInputs();
-        };
+        });
 
-        document.getElementById('saveAdd').onclick = async () => {
-            const name = document.getElementById('addInput').value;
+        document.getElementById('saveAdd').addEventListener('click', async () => {
+            const name = document.getElementById('addInput').value.trim();
             if (!name) {
                 alert('請輸入名稱！');
                 return;
@@ -814,6 +876,7 @@
                 await saveData();
                 renderLocationsPage();
             } else if (addModalType === 'area') {
+                if (!data.locations[currentLocationId]) data.locations[currentLocationId] = { areas: {} };
                 if (oldId) {
                     data.locations[currentLocationId].areas[id] = { ...data.locations[currentLocationId].areas[oldId], name };
                     if (oldId !== id) delete data.locations[currentLocationId].areas[oldId];
@@ -841,17 +904,20 @@
                 const inputElements = document.querySelectorAll('#dimensionsInputs input');
                 if (sides > 1) {
                     for (let i = 0; i < sides; i++) {
-                        dimensions[dimFields[i]] = inputElements[i].value;
+                        dimensions[dimFields[i]] = inputElements[i]?.value || '';
                     }
                 } else {
-                    dimensions.size = inputElements[0].value;
+                    dimensions.size = inputElements[0]?.value || '';
                 }
                 if (sides > 1) {
                     for (let i = 1; i <= sides; i++) {
                         const subName = `${name} ${type === 'L' ? (i === 1 ? '短' : '長') : i}`;
                         const subId = `${id}-${type === 'L' ? (i === 1 ? 'short' : 'long') : i}`;
                         const subDim = dimensions[dimFields[i-1]];
-                        const existingCells = editingCabinet && data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId]?.cells_data || {};
+                        const existingCells = editingCabinet && data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId]?.cells_data || {};
+                        if (!data.locations[currentLocationId].areas[currentAreaId]) {
+                            data.locations[currentLocationId].areas[currentAreaId] = { cabinets: {} };
+                        }
                         data.locations[currentLocationId].areas[currentAreaId].cabinets[subId] = {
                             name: subName,
                             type,
@@ -859,16 +925,19 @@
                             cells_data: i === 1 ? existingCells : {}
                         };
                     }
-                    if (editingCabinet && editingCabinetId !== id + '-1') {
+                    if (editingCabinet && editingCabinetId && editingCabinetId !== id + '-1') {
                         delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
                     }
                 } else {
                     const cabId = editingCabinet ? editingCabinetId : id;
+                    if (!data.locations[currentLocationId].areas[currentAreaId]) {
+                        data.locations[currentLocationId].areas[currentAreaId] = { cabinets: {} };
+                    }
                     data.locations[currentLocationId].areas[currentAreaId].cabinets[cabId] = {
                         name,
                         type,
                         dimensions,
-                        cells_data: data.locations[currentLocationId].areas[currentAreaId].cabinets[cabId]?.cells_data || {}
+                        cells_data: data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[cabId]?.cells_data || {}
                     };
                 }
                 await saveData();
@@ -878,40 +947,44 @@
             document.getElementById('addInput').dataset.oldId = '';
             editingCabinet = false;
             editingCabinetId = null;
-        };
+            addModalType = '';
+        });
 
-        document.getElementById('deleteAdd').onclick = async () => {
+        document.getElementById('deleteAdd').addEventListener('click', async () => {
             const oldId = document.getElementById('addInput').dataset.oldId;
-            if (addModalType === 'location') {
+            if (addModalType === 'location' && oldId) {
                 if (confirm('確定要刪除這個地點嗎？(包含所有子資料)')) {
                     delete data.locations[oldId];
                     await saveData();
                     renderLocationsPage();
                 }
-            } else if (addModalType === 'area') {
+            } else if (addModalType === 'area' && oldId) {
                 if (confirm('確定要刪除這個區域嗎？(包含所有子資料)')) {
-                    delete data.locations[currentLocationId].areas[oldId];
+                    delete data.locations[currentLocationId]?.areas[oldId];
                     await saveData();
                     renderAreasPage();
                 }
-            } else if (addModalType === 'cabinet') {
+            } else if (addModalType === 'cabinet' && editingCabinetId) {
                 if (confirm('確定要刪除這個櫃體嗎？')) {
-                    delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
+                    delete data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId];
                     await saveData();
                     renderCabinets();
                 }
             }
             document.getElementById('addModal').classList.add('hidden');
             document.getElementById('addInput').dataset.oldId = '';
-        };
+            editingCabinet = false;
+            editingCabinetId = null;
+            addModalType = '';
+        });
 
-        document.getElementById('searchBtn').onclick = async () => {
+        document.getElementById('searchBtn').addEventListener('click', async () => {
             const query = document.getElementById('searchName').value.toLowerCase();
             const date = document.getElementById('searchDate').value;
             let results = [];
             Object.entries(data.locations).forEach(([locId, loc]) => {
-                Object.entries(loc.areas).forEach(([areaId, area]) => {
-                    Object.entries(area.cabinets).forEach(([cabId, cab]) => {
+                Object.entries(loc.areas || {}).forEach(([areaId, area]) => {
+                    Object.entries(area.cabinets || {}).forEach(([cabId, cab]) => {
                         Object.entries(cab.cells_data || {}).forEach(([cellId, cell]) => {
                             cell.items?.forEach(item => {
                                 if ((query && item.name.toLowerCase().includes(query)) || (date && item.expiryDate === date)) {
@@ -923,14 +996,14 @@
                 });
             });
             alert(`搜尋結果：\n${results.map(r => `${r.location} > ${r.area} > ${r.cabinet} > ${r.cellId} > ${r.item.name}`).join('\n') || '無結果'}`);
-        };
+        });
 
         function checkReminders() {
             const today = new Date();
             const reminders = [];
             Object.entries(data.locations).forEach(([locId, loc]) => {
-                Object.entries(loc.areas).forEach(([areaId, area]) => {
-                    Object.entries(area.cabinets).forEach(([cabId, cab]) => {
+                Object.entries(loc.areas || {}).forEach(([areaId, area]) => {
+                    Object.entries(area.cabinets || {}).forEach(([cabId, cab]) => {
                         Object.entries(cab.cells_data || {}).forEach(([cellId, cell]) => {
                             cell.items?.forEach(item => {
                                 if (item.expiryDate && (new Date(item.expiryDate) - today) / (1000 * 60 * 60 * 24) < 30) {
@@ -958,8 +1031,11 @@
 
         function navigateToItem(locationName, areaName, cabinetName, cellId) {
             const locId = Object.keys(data.locations).find(id => data.locations[id].name === locationName);
-            const areaId = Object.keys(data.locations[locId].areas).find(id => data.locations[locId].areas[id].name === areaName);
-            const cabId = Object.keys(data.locations[locId].areas[areaId].cabinets).find(id => data.locations[locId].areas[areaId].cabinets[id].name === cabinetName);
+            if (!locId) return;
+            const areaId = Object.keys(data.locations[locId].areas || {}).find(id => data.locations[locId].areas[id].name === areaName);
+            if (!areaId) return;
+            const cabId = Object.keys(data.locations[locId].areas[areaId].cabinets || {}).find(id => data.locations[locId].areas[areaId].cabinets[id].name === cabinetName);
+            if (!cabId) return;
             currentLocationId = locId;
             currentAreaId = areaId;
             currentCabinetId = cabId;
@@ -973,49 +1049,58 @@
             }, 100);
         }
 
-        document.getElementById('editGridBtn').onclick = async () => {
+        document.getElementById('editGridBtn').addEventListener('click', async () => {
             editMode = !editMode;
             document.getElementById('editGridBtn').textContent = editMode ? '完成編輯 (合併選取格子)' : '編輯網格';
-            if (!editMode && selectedCells.length > 0 && !selectedCells.some(id => data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId].cells_data[id]?.merged)) {
+            if (!editMode && selectedCells.length > 0 && !selectedCells.some(id => data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId]?.cells_data[id]?.merged)) {
                 await mergeCells();
             }
             selectedCells = [];
             renderCells();
-        };
-
-        document.getElementById('undoMergeBtn').onclick = () => {
-            undoMerge();
-        };
-
-        document.getElementById('splitCellBtn').onclick = () => {
-            splitCell();
-        };
-
-        document.getElementById('closeImagePreview').onclick = () => {
-            document.getElementById('imagePreviewModal').classList.add('hidden');
-        };
-
-        document.querySelectorAll('#backToLocations').forEach(btn => {
-            btn.onclick = renderLocationsPage;
         });
 
-        document.getElementById('backToAreas').onclick = renderAreasPage;
-        document.getElementById('backToCabinets').onclick = () => {
+        document.getElementById('undoMergeBtn').addEventListener('click', () => {
+            undoMerge();
+        });
+
+        document.getElementById('splitCellBtn').addEventListener('click', () => {
+            splitCell();
+        });
+
+        document.getElementById('closeImagePreview').addEventListener('click', () => {
+            document.getElementById('imagePreviewModal').classList.add('hidden');
+        });
+
+        document.querySelectorAll('#backToLocations').forEach(btn => {
+            btn.addEventListener('click', renderLocationsPage);
+        });
+
+        document.getElementById('backToAreas').addEventListener('click', renderAreasPage);
+
+        document.getElementById('backToCabinets').addEventListener('click', () => {
             document.getElementById('cellsPage').classList.add('hidden');
             document.getElementById('cabinetsPage').classList.remove('hidden');
-        };
+        });
 
-        document.getElementById('cancelAdd').onclick = () => {
+        document.getElementById('cancelAdd').addEventListener('click', () => {
             document.getElementById('addModal').classList.add('hidden');
             document.getElementById('addInput').dataset.oldId = '';
             editingCabinet = false;
             editingCabinetId = null;
             addModalType = '';
-        };
-        document.getElementById('closeModal').onclick = () => document.getElementById('itemModal').classList.add('hidden');
-        document.getElementById('closeReminder').onclick = () => document.getElementById('reminderModal').classList.add('hidden');
+        });
+
+        document.getElementById('closeModal').addEventListener('click', () => {
+            document.getElementById('itemModal').classList.add('hidden');
+        });
+
+        document.getElementById('closeReminder').addEventListener('click', () => {
+            document.getElementById('reminderModal').classList.add('hidden');
+        });
+
         document.getElementById('searchName').addEventListener('input', debounce(() => document.getElementById('searchBtn').click(), 300));
-        document.getElementById('cabinetType').onchange = () => updateDimensionsInputs();
+
+        document.getElementById('cabinetType').addEventListener('change', () => updateDimensionsInputs());
 
         function debounce(func, wait) {
             let timeout;
@@ -1029,7 +1114,7 @@
             };
         }
 
-        document.getElementById('exportBtn').onclick = async () => {
+        document.getElementById('exportBtn').addEventListener('click', async () => {
             const snapshot = await get(ref(db, '/cabinetData'));
             const exportData = snapshot.val() || data;
             if (Object.keys(exportData).length === 0) {
@@ -1044,14 +1129,14 @@
             link.click();
             URL.revokeObjectURL(url);
             alert('資料已匯出為 cabinetAppData.json 檔案，請妥善保存！');
-        };
+        });
 
-        document.getElementById('importBtn').onclick = () => {
+        document.getElementById('importBtn').addEventListener('click', () => {
             document.getElementById('importInput').value = '';
             document.getElementById('importInput').click();
-        };
+        });
 
-        document.getElementById('importInput').onchange = async (e) => {
+        document.getElementById('importInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             if (!file.name.endsWith('.json')) {
@@ -1075,13 +1160,15 @@
                 }
             };
             reader.readAsText(file);
-        };
+        });
 
         // 初始化載入
-        loadData().then(() => {
+        async function init() {
+            await loadData();
             renderLocationsPage();
             checkReminders();
-        });
+        }
+        init();
     </script>
 </body>
 </html>
