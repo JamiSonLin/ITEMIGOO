@@ -250,11 +250,16 @@
                         return acc;
                     }, {})
                 };
-                // 確保每個地點都有 areas 屬性
+                // 確保每個地點都有 areas 屬性，並驗證 cabinets
                 Object.keys(data.locations).forEach(locId => {
                     if (!data.locations[locId].areas) {
                         data.locations[locId].areas = {};
                     }
+                    Object.keys(data.locations[locId].areas).forEach(areaId => {
+                        if (!data.locations[locId].areas[areaId].cabinets) {
+                            data.locations[locId].areas[areaId].cabinets = {};
+                        }
+                    });
                     // 如果是 "家裡" 且 areas 為空，補充預設區域
                     if (locId === '家裡' && Object.keys(data.locations[locId].areas).length === 0) {
                         data.locations[locId].areas = defaultLocations[0].areas.reduce((areaAcc, areaName) => {
@@ -307,11 +312,16 @@
             if (updatedData && JSON.stringify(updatedData) !== JSON.stringify(data)) {
                 data = updatedData;
                 console.log('資料已同步:', data);
-                // 確保同步後重新檢查 areas
+                // 確保同步後重新檢查 areas 和 cabinets
                 Object.keys(data.locations).forEach(locId => {
                     if (!data.locations[locId].areas) {
                         data.locations[locId].areas = {};
                     }
+                    Object.keys(data.locations[locId].areas).forEach(areaId => {
+                        if (!data.locations[locId].areas[areaId].cabinets) {
+                            data.locations[locId].areas[areaId].cabinets = {};
+                        }
+                    });
                 });
                 if (currentCabinetId) renderCells();
                 else if (currentAreaId) renderCabinets();
@@ -425,6 +435,10 @@
             document.getElementById('addModal').classList.remove('hidden');
         }
 
+        function validateDimension(dim) {
+            return /^[0-9]+x[0-9]+$/.test(dim.toLowerCase());
+        }
+
         function updateDimensionsInputs(dimensions = {}) {
             const type = document.getElementById('cabinetType').value;
             const inputs = document.getElementById('dimensionsInputs');
@@ -439,7 +453,7 @@
             } else if (type === 'U' || type === 'square') {
                 const sides = type === 'U' ? 3 : 4;
                 for (let i = 1; i <= sides; i++) {
-                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[`side${i}`] || ''}">`;
+                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[\`side${i}\`] || ''}">`;
                 }
             }
         }
@@ -541,6 +555,12 @@
                 alert('請選取至少2個相鄰格子！');
                 return;
             }
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) {
+                alert('櫃體資料缺失，請返回重新選擇');
+                return;
+            }
+            if (!cab.cells_data) cab.cells_data = {};
             const positions = selectedCells.map(id => id.split('-').map(Number));
             const minRow = Math.min(...positions.map(p => p[0]));
             const maxRow = Math.max(...positions.map(p => p[0]));
@@ -563,8 +583,7 @@
                 alert('選取的格子必須相鄰且形成矩形！');
                 return;
             }
-            const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
-            const cells = cab.cells_data || {};
+            const cells = cab.cells_data;
             const mergedId = selectedCells[0];
             let mergedItems = [];
             let mergedText = '';
@@ -586,7 +605,6 @@
                 span: { row: rowSpan, col: colSpan },
                 text: mergedText
             };
-            cab.cells_data = cells;
             await saveData();
             selectedCells = [];
             editMode = false;
@@ -639,7 +657,6 @@
                 }
             }
             delete cells[cellId];
-            cab.cells_data = cells;
             await saveData();
             selectedCells = [];
             editMode = false;
@@ -686,8 +703,11 @@
 
         function editItem(index) {
             const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
-            if (!cab) return;
-            const item = cab.cells_data[currentCellId]?.items[index];
+            if (!cab || !cab.cells_data?.[currentCellId]) {
+                alert('儲存格資料缺失，請重新選擇！');
+                return;
+            }
+            const item = cab.cells_data[currentCellId].items[index];
             if (!item) return;
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemQty').value = item.quantity || '';
@@ -733,22 +753,26 @@
             }
             const imageInput = document.getElementById('itemImage');
             const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
-            if (!cab) return;
+            if (!cab) {
+                alert('櫃體資料缺失，請返回重新選擇');
+                return;
+            }
             if (!cab.cells_data) cab.cells_data = {};
             if (!cab.cells_data[currentCellId]) {
                 cab.cells_data[currentCellId] = { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
             }
             const cell = cab.cells_data[currentCellId];
             const items = cell.items || [];
+
             const processItem = async (newImage) => {
-                if (newImage) item.image = newImage;
-                else if (editingItemIndex > -1) item.image = items[editingItemIndex]?.image || '';
+                item.image = newImage || (editingItemIndex > -1 ? items[editingItemIndex]?.image || '' : '');
                 if (editingItemIndex > -1) {
                     items[editingItemIndex] = item;
                 } else {
                     items.push(item);
                 }
-                cell.text = item.name;
+                cell.text = items.map(i => i.name).join(', ');
+                cell.items = items;
                 await saveData();
                 document.getElementById('itemForm').reset();
                 document.getElementById('itemModal').classList.add('hidden');
@@ -756,11 +780,11 @@
                 checkReminders();
                 editingItemIndex = -1;
             };
+
             if (imageInput.files && imageInput.files[0]) {
                 const reader = new FileReader();
-                reader.onload = (e) => {
-                    processItem(e.target.result);
-                };
+                reader.onload = (e) => processItem(e.target.result);
+                reader.onerror = () => alert('圖片讀取失敗，請重試！');
                 reader.readAsDataURL(imageInput.files[0]);
             } else {
                 await processItem('');
@@ -770,7 +794,10 @@
         async function deleteItem(index) {
             if (confirm('確定要刪除這個物品嗎？')) {
                 const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
-                if (!cab || !cab.cells_data[currentCellId]) return;
+                if (!cab || !cab.cells_data?.[currentCellId]) {
+                    alert('儲存格資料缺失，請重新選擇！');
+                    return;
+                }
                 cab.cells_data[currentCellId].items.splice(index, 1);
                 if (cab.cells_data[currentCellId].items.length === 0) {
                     cab.cells_data[currentCellId].text = '';
@@ -864,6 +891,15 @@
             }
             let id = name.toLowerCase().replace(/\s/g, '-');
             const oldId = document.getElementById('addInput').dataset.oldId || '';
+
+            // 確保資料結構初始化
+            if (currentLocationId && !data.locations[currentLocationId]) {
+                data.locations[currentLocationId] = { name: currentLocationId, areas: {} };
+            }
+            if (currentLocationId && currentAreaId && !data.locations[currentLocationId].areas[currentAreaId]) {
+                data.locations[currentLocationId].areas[currentAreaId] = { name: currentAreaId, cabinets: {} };
+            }
+
             if (addModalType === 'location') {
                 if (oldId) {
                     data.locations[id] = { ...data.locations[oldId], name };
@@ -871,72 +907,102 @@
                     currentLocationId = id;
                 } else {
                     data.locations[id] = { name, areas: {} };
+                    currentLocationId = id;
                 }
                 await saveData();
                 renderLocationsPage();
             } else if (addModalType === 'area') {
-                if (!data.locations[currentLocationId]) data.locations[currentLocationId] = { areas: {} };
                 if (oldId) {
-                    data.locations[currentLocationId].areas[id] = { ...data.locations[currentLocationId].areas[oldId], name };
+                    data.locations[currentLocationId].areas[id] = {
+                        ...data.locations[currentLocationId].areas[oldId],
+                        name
+                    };
                     if (oldId !== id) delete data.locations[currentLocationId].areas[oldId];
                     currentAreaId = id;
                 } else {
                     data.locations[currentLocationId].areas[id] = { name, cabinets: {} };
+                    currentAreaId = id;
                 }
                 await saveData();
                 renderAreasPage();
             } else if (addModalType === 'cabinet') {
                 const type = document.getElementById('cabinetType').value;
-                let sides = 1;
-                let dimFields = ['size'];
-                if (type === 'L') {
-                    sides = 2;
-                    dimFields = ['short', 'long'];
-                } else if (type === 'U') {
-                    sides = 3;
-                    dimFields = ['side1', 'side2', 'side3'];
-                } else if (type === 'square') {
-                    sides = 4;
-                    dimFields = ['side1', 'side2', 'side3', 'side4'];
-                }
-                let dimensions = {};
                 const inputElements = document.querySelectorAll('#dimensionsInputs input');
-                if (sides > 1) {
-                    for (let i = 0; i < sides; i++) {
-                        dimensions[dimFields[i]] = inputElements[i]?.value || '';
+                let dimensions = {};
+                let sides = 1;
+
+                if (type === 'L') {
+                    dimensions = {
+                        short: inputElements[0]?.value.trim() || '',
+                        long: inputElements[1]?.value.trim() || ''
+                    };
+                    if (!validateDimension(dimensions.short) || !validateDimension(dimensions.long)) {
+                        alert('L型櫃體規格格式錯誤，請輸入如 3x3 的格式！');
+                        return;
                     }
-                } else {
-                    dimensions.size = inputElements[0]?.value || '';
-                }
-                if (sides > 1) {
-                    for (let i = 1; i <= sides; i++) {
-                        const subName = `${name} ${type === 'L' ? (i === 1 ? '短' : '長') : i}`;
-                        const subId = `${id}-${type === 'L' ? (i === 1 ? 'short' : 'long') : i}`;
-                        const subDim = dimensions[dimFields[i-1]];
-                        const existingCells = editingCabinet && data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId]?.cells_data || {};
-                        if (!data.locations[currentLocationId].areas[currentAreaId]) {
-                            data.locations[currentLocationId].areas[currentAreaId] = { cabinets: {} };
+                    sides = 2;
+                    // 處理 L 型櫃體：建立兩個子櫃體
+                    const shortId = `${id}-short`;
+                    const longId = `${id}-long`;
+                    const shortName = `${name} 短`;
+                    const longName = `${name} 長`;
+
+                    // 如果是編輯，保留現有 cells_data
+                    const existingCells = editingCabinet && data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId]?.cells_data || {};
+
+                    data.locations[currentLocationId].areas[currentAreaId].cabinets[shortId] = {
+                        name: shortName,
+                        type,
+                        dimensions: { size: dimensions.short },
+                        cells_data: editingCabinet ? existingCells : {}
+                    };
+                    data.locations[currentLocationId].areas[currentAreaId].cabinets[longId] = {
+                        name: longName,
+                        type,
+                        dimensions: { size: dimensions.long },
+                        cells_data: {}
+                    };
+
+                    // 如果是編輯，刪除舊櫃體
+                    if (editingCabinet && editingCabinetId && editingCabinetId !== shortId && editingCabinetId !== longId) {
+                        delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
+                    }
+                } else if (type === 'U' || type === 'square') {
+                    sides = type === 'U' ? 3 : 4;
+                    for (let i = 0; i < sides; i++) {
+                        const sideDim = inputElements[i]?.value.trim() || '';
+                        if (!validateDimension(sideDim)) {
+                            alert(`面${i + 1}規格格式錯誤，請輸入如 3x3 的格式！`);
+                            return;
                         }
-                        data.locations[currentLocationId].areas[currentAreaId].cabinets[subId] = {
-                            name: subName,
+                        const sideId = `${id}-side${i + 1}`;
+                        const sideName = `${name} 面${i + 1}`;
+                        const existingCells = (editingCabinet && i === 0) ? (data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId]?.cells_data || {}) : {};
+                        data.locations[currentLocationId].areas[currentAreaId].cabinets[sideId] = {
+                            name: sideName,
                             type,
-                            dimensions: { size: subDim },
-                            cells_data: i === 1 ? existingCells : {}
+                            dimensions: { size: sideDim },
+                            cells_data: existingCells
                         };
                     }
-                    if (editingCabinet && editingCabinetId && editingCabinetId !== id + '-1') {
+                    // 如果是編輯，刪除舊櫃體
+                    if (editingCabinet && editingCabinetId) {
                         delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
                     }
                 } else {
-                    const cabId = editingCabinet ? editingCabinetId : id;
-                    if (!data.locations[currentLocationId].areas[currentAreaId]) {
-                        data.locations[currentLocationId].areas[currentAreaId] = { cabinets: {} };
+                    // 一字形
+                    dimensions.size = inputElements[0]?.value.trim() || '';
+                    if (!validateDimension(dimensions.size)) {
+                        alert('櫃體規格格式錯誤，請輸入如 3x3 的格式！');
+                        return;
                     }
+                    const cabId = editingCabinet ? editingCabinetId : id;
+                    const existingCells = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[cabId]?.cells_data || {};
                     data.locations[currentLocationId].areas[currentAreaId].cabinets[cabId] = {
                         name,
                         type,
                         dimensions,
-                        cells_data: data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[cabId]?.cells_data || {}
+                        cells_data: existingCells
                     };
                 }
                 await saveData();
