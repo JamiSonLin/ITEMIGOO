@@ -8,6 +8,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
+      import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
+      
+      // 替換為你的 Firebase 配置（從 Firebase Console 取得）
+     const firebaseConfig = {
+  apiKey: "AIzaSyDxJCKSvrB3a6tYtzV9Q90p68odxaqQcXw",
+  authDomain: "cabinet-sync-db.firebaseapp.com",
+  databaseURL: "https://cabinet-sync-db-default-rtdb.firebaseio.com",
+  projectId: "cabinet-sync-db",
+  storageBucket: "cabinet-sync-db.firebasestorage.app",
+  messagingSenderId: "209194186803",
+  appId: "1:209194186803:web:6498fd5c812ea419e5cb46"
+};
+      
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      window.db = db; // 暴露給其他 JS 使用
+    </script>
     <script>
         tailwind.config = {
             theme: {
@@ -199,28 +219,7 @@
         ];
 
         // 全域資料
-        let data = JSON.parse(localStorage.getItem('cabinetApp')) || {
-            locations: defaultLocations.reduce((acc, loc) => {
-                const locId = loc.name.toLowerCase().replace(/\s/g, '-');
-                acc[locId] = {
-                    name: loc.name,
-                    areas: loc.areas.reduce((areaAcc, areaName) => {
-                        const areaId = areaName.toLowerCase().replace(/\s/g, '-');
-                        areaAcc[areaId] = { name: areaName, cabinets: {} };
-                        return areaAcc;
-                    }, {})
-                };
-                return acc;
-            }, {})
-        };
-        if (data.areas) {
-            data.locations = {
-                'jia-li': { name: '家裡', areas: data.areas }
-            };
-            delete data.areas;
-            saveData();
-        }
-
+        let data = {};
         let currentLocationId = null;
         let currentAreaId = null;
         let currentCabinetId = null;
@@ -233,9 +232,57 @@
         let addModalType = '';
         let editingItemIndex = -1;
 
-        function saveData() {
-            localStorage.setItem('cabinetApp', JSON.stringify(data));
+        // 載入資料（從 Firebase）
+        async function loadData() {
+            try {
+                const snapshot = await get(ref(db, '/cabinetData'));
+                data = snapshot.val() || {
+                    locations: defaultLocations.reduce((acc, loc) => {
+                        const locId = loc.name.toLowerCase().replace(/\s/g, '-');
+                        acc[locId] = {
+                            name: loc.name,
+                            areas: loc.areas.reduce((areaAcc, areaName) => {
+                                const areaId = areaName.toLowerCase().replace(/\s/g, '-');
+                                areaAcc[areaId] = { name: areaName, cabinets: {} };
+                                return areaAcc;
+                            }, {})
+                        };
+                        return acc;
+                    }, {})
+                };
+                // 遷移舊 localStorage（僅第一次）
+                const localData = JSON.parse(localStorage.getItem('cabinetApp') || '{}');
+                if (Object.keys(localData).length > 0 && Object.keys(data).length === 0) {
+                    await set(ref(db, '/cabinetData'), localData);
+                    data = localData;
+                    localStorage.removeItem('cabinetApp');
+                }
+            } catch (error) {
+                console.error('載入失敗:', error);
+                data = { locations: {} };
+            }
         }
+
+        // 儲存資料（到 Firebase）
+        async function saveData() {
+            try {
+                await set(ref(db, '/cabinetData'), data);
+            } catch (error) {
+                console.error('儲存失敗:', error);
+            }
+        }
+
+        // 即時同步
+        onValue(ref(db, '/cabinetData'), (snapshot) => {
+            const updatedData = snapshot.val();
+            if (updatedData && JSON.stringify(updatedData) !== JSON.stringify(data)) {
+                data = updatedData;
+                if (currentCabinetId) renderCells();
+                else if (currentAreaId) renderCabinets();
+                else if (currentLocationId) renderAreasPage();
+                else renderLocationsPage();
+            }
+        });
 
         function renderLocationsPage() {
             document.getElementById('locationsPage').classList.remove('hidden');
@@ -356,11 +403,11 @@
             }
         }
 
-        function deleteCabinet(cabId, event) {
+        async function deleteCabinet(cabId, event) {
             event.stopPropagation();
             if (confirm('確定要刪除這個櫃體嗎？')) {
                 delete data.locations[currentLocationId].areas[currentAreaId].cabinets[cabId];
-                saveData();
+                await saveData();
                 renderCabinets();
             }
         }
@@ -443,7 +490,7 @@
             renderCells();
         }
 
-        function mergeCells() {
+        async function mergeCells() {
             if (selectedCells.length < 2) {
                 alert('請選取至少2個相鄰格子！');
                 return;
@@ -494,14 +541,14 @@
                 text: mergedText
             };
             cab.cells_data = cells;
-            saveData();
+            await saveData();
             selectedCells = [];
             editMode = false;
             document.getElementById('editGridBtn').textContent = '編輯網格';
             renderCells();
         }
 
-        function undoMerge() {
+        async function undoMerge() {
             if (mergeHistory.length === 0) return;
             const lastMerge = mergeHistory.pop();
             const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
@@ -510,14 +557,14 @@
                 cells[id] = { ...cellData };
             });
             delete cells[lastMerge.mergedId];
-            saveData();
+            await saveData();
             selectedCells = [];
             editMode = false;
             document.getElementById('editGridBtn').textContent = '編輯網格';
             renderCells();
         }
 
-        function splitCell() {
+        async function splitCell() {
             if (selectedCells.length !== 1) {
                 alert('請選取一個已合併的格子進行分拆！');
                 return;
@@ -541,13 +588,13 @@
                         items: i === row && j === col ? cellData.items : [],
                         merged: false,
                         span: { row: 1, col: 1 },
-                        text: i === row && j === col ? cellData.text : '' // 保留原始文字僅在第一個儲存格
+                        text: i === row && j === col ? cellData.text : ''
                     };
                 }
             }
             delete cells[cellId];
             cab.cells_data = cells;
-            saveData();
+            await saveData();
             selectedCells = [];
             editMode = false;
             document.getElementById('editGridBtn').textContent = '編輯網格';
@@ -600,12 +647,12 @@
             editingItemIndex = index;
         }
 
-        function removeImage(index) {
+        async function removeImage(index) {
             if (confirm('確定要刪除這張照片嗎？物品其他資訊將保留。')) {
                 const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
                 const item = cab.cells_data[currentCellId].items[index];
                 item.image = '';
-                saveData();
+                await saveData();
                 openItemModal(currentCellId);
             }
         }
@@ -615,7 +662,7 @@
             document.getElementById('imagePreviewModal').classList.remove('hidden');
         }
 
-        document.getElementById('itemForm').addEventListener('submit', (e) => {
+        document.getElementById('itemForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const item = {
                 name: document.getElementById('itemName').value.trim(),
@@ -638,7 +685,7 @@
             }
             const cell = cab.cells_data[currentCellId];
             const items = cell.items;
-            const processItem = (newImage) => {
+            const processItem = async (newImage) => {
                 if (newImage) item.image = newImage;
                 else if (editingItemIndex > -1) item.image = items[editingItemIndex].image;
                 if (editingItemIndex > -1) {
@@ -647,7 +694,7 @@
                     items.push(item);
                 }
                 cell.text = item.name;
-                saveData();
+                await saveData();
                 document.getElementById('itemForm').reset();
                 document.getElementById('itemModal').classList.add('hidden');
                 renderCells();
@@ -661,11 +708,11 @@
                 };
                 reader.readAsDataURL(imageInput.files[0]);
             } else {
-                processItem('');
+                await processItem('');
             }
         });
 
-        function deleteItem(index) {
+        async function deleteItem(index) {
             if (confirm('確定要刪除這個物品嗎？')) {
                 const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
                 cab.cells_data[currentCellId].items.splice(index, 1);
@@ -677,12 +724,12 @@
                 if (cab.cells_data[currentCellId].items.length === 0) {
                     delete cab.cells_data[currentCellId];
                 }
-                saveData();
+                await saveData();
                 openItemModal(currentCellId);
             }
         }
 
-        function sortItems(field) {
+        async function sortItems(field) {
             const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
             const items = cab.cells_data[currentCellId]?.items || [];
             items.sort((a, b) => {
@@ -698,7 +745,7 @@
                 return valA > valB ? 1 : -1;
             });
             cab.cells_data[currentCellId].text = items.map(item => item.name).join(', ');
-            saveData();
+            await saveData();
             openItemModal(currentCellId);
         }
 
@@ -748,7 +795,7 @@
             updateDimensionsInputs();
         };
 
-        document.getElementById('saveAdd').onclick = () => {
+        document.getElementById('saveAdd').onclick = async () => {
             const name = document.getElementById('addInput').value;
             if (!name) {
                 alert('請輸入名稱！');
@@ -764,7 +811,7 @@
                 } else {
                     data.locations[id] = { name, areas: {} };
                 }
-                saveData();
+                await saveData();
                 renderLocationsPage();
             } else if (addModalType === 'area') {
                 if (oldId) {
@@ -774,7 +821,7 @@
                 } else {
                     data.locations[currentLocationId].areas[id] = { name, cabinets: {} };
                 }
-                saveData();
+                await saveData();
                 renderAreasPage();
             } else if (addModalType === 'cabinet') {
                 const type = document.getElementById('cabinetType').value;
@@ -824,7 +871,7 @@
                         cells_data: data.locations[currentLocationId].areas[currentAreaId].cabinets[cabId]?.cells_data || {}
                     };
                 }
-                saveData();
+                await saveData();
                 renderCabinets();
             }
             document.getElementById('addModal').classList.add('hidden');
@@ -833,24 +880,24 @@
             editingCabinetId = null;
         };
 
-        document.getElementById('deleteAdd').onclick = () => {
+        document.getElementById('deleteAdd').onclick = async () => {
             const oldId = document.getElementById('addInput').dataset.oldId;
             if (addModalType === 'location') {
                 if (confirm('確定要刪除這個地點嗎？(包含所有子資料)')) {
                     delete data.locations[oldId];
-                    saveData();
+                    await saveData();
                     renderLocationsPage();
                 }
             } else if (addModalType === 'area') {
                 if (confirm('確定要刪除這個區域嗎？(包含所有子資料)')) {
                     delete data.locations[currentLocationId].areas[oldId];
-                    saveData();
+                    await saveData();
                     renderAreasPage();
                 }
             } else if (addModalType === 'cabinet') {
                 if (confirm('確定要刪除這個櫃體嗎？')) {
                     delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
-                    saveData();
+                    await saveData();
                     renderCabinets();
                 }
             }
@@ -858,7 +905,7 @@
             document.getElementById('addInput').dataset.oldId = '';
         };
 
-        document.getElementById('searchBtn').onclick = () => {
+        document.getElementById('searchBtn').onclick = async () => {
             const query = document.getElementById('searchName').value.toLowerCase();
             const date = document.getElementById('searchDate').value;
             let results = [];
@@ -926,11 +973,11 @@
             }, 100);
         }
 
-        document.getElementById('editGridBtn').onclick = () => {
+        document.getElementById('editGridBtn').onclick = async () => {
             editMode = !editMode;
             document.getElementById('editGridBtn').textContent = editMode ? '完成編輯 (合併選取格子)' : '編輯網格';
             if (!editMode && selectedCells.length > 0 && !selectedCells.some(id => data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId].cells_data[id]?.merged)) {
-                mergeCells();
+                await mergeCells();
             }
             selectedCells = [];
             renderCells();
@@ -982,15 +1029,14 @@
             };
         }
 
-        renderLocationsPage();
-        checkReminders();
-
-        document.getElementById('exportBtn').onclick = () => {
-            if (Object.keys(data).length === 0) {
+        document.getElementById('exportBtn').onclick = async () => {
+            const snapshot = await get(ref(db, '/cabinetData'));
+            const exportData = snapshot.val() || data;
+            if (Object.keys(exportData).length === 0) {
                 alert('目前沒有資料可匯出！');
                 return;
             }
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -1005,7 +1051,7 @@
             document.getElementById('importInput').click();
         };
 
-        document.getElementById('importInput').onchange = (e) => {
+        document.getElementById('importInput').onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             if (!file.name.endsWith('.json')) {
@@ -1013,14 +1059,14 @@
                 return;
             }
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 try {
                     const importedData = JSON.parse(event.target.result);
                     if (!importedData.locations || typeof importedData.locations !== 'object') {
                         throw new Error('無效的資料結構');
                     }
+                    await set(ref(db, '/cabinetData'), importedData);
                     data = importedData;
-                    saveData();
                     renderLocationsPage();
                     checkReminders();
                     alert('資料已成功匯入並恢復！');
@@ -1030,6 +1076,12 @@
             };
             reader.readAsText(file);
         };
+
+        // 初始化載入
+        loadData().then(() => {
+            renderLocationsPage();
+            checkReminders();
+        });
     </script>
 </body>
 </html>
