@@ -6,6 +6,8 @@
     <title>櫃體置物管理應用程式</title>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Favicon (避免404錯誤, 如果沒有檔案可移除或上傳 favicon.ico) -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <!-- Tailwind CSS CDN (開發用, 生產環境建議安裝本地版本) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -77,6 +79,7 @@
         <input id="searchName" type="text" placeholder="搜尋物品名稱..." class="flex-1 p-2 border rounded-lg">
         <input id="searchDate" type="date" class="p-2 border rounded-lg">
         <button id="searchBtn" class="px-4 py-2 bg-primary text-white rounded-lg">搜尋</button>
+        <!-- 新增: 匯出/匯入按鈕 -->
         <button id="exportBtn" class="px-4 py-2 bg-green-500 text-white rounded-lg">匯出資料</button>
         <button id="importBtn" class="px-4 py-2 bg-blue-500 text-white rounded-lg">匯入資料</button>
         <input id="importInput" type="file" accept=".json" class="hidden">
@@ -126,11 +129,11 @@
                 <thead>
                     <tr class="bg-gray-100">
                         <th class="p-2">圖片</th>
-                        <th class="p-2 cursor-pointer" data-sort="name">名稱</th>
-                        <th class="p-2 cursor-pointer" data-sort="quantity">數量</th>
-                        <th class="p-2 cursor-pointer" data-sort="entryDate">存入日期</th>
-                        <th class="p-2 cursor-pointer" data-sort="expiryDate">有效日期</th>
-                        <th class="p-2 cursor-pointer" data-sort="purchasePlace">購買地</th>
+                        <th class="p-2 cursor-pointer" onclick="sortItems('name')">名稱</th>
+                        <th class="p-2 cursor-pointer" onclick="sortItems('quantity')">數量</th>
+                        <th class="p-2 cursor-pointer" onclick="sortItems('entryDate')">存入日期</th>
+                        <th class="p-2 cursor-pointer" onclick="sortItems('expiryDate')">有效日期</th>
+                        <th class="p-2 cursor-pointer" onclick="sortItems('purchasePlace')">購買地</th>
                         <th class="p-2">備註</th>
                         <th class="p-2">操作</th>
                     </tr>
@@ -257,6 +260,7 @@
                             data.locations[locId].areas[areaId].cabinets = {};
                         }
                     });
+                    // 如果是 "家裡" 且 areas 為空，補充預設區域
                     if (locId === '家裡' && Object.keys(data.locations[locId].areas).length === 0) {
                         data.locations[locId].areas = defaultLocations[0].areas.reduce((areaAcc, areaName) => {
                             const areaId = areaName.toLowerCase().replace(/\s/g, '-');
@@ -265,6 +269,7 @@
                         }, {});
                     }
                 });
+                // 如果 Firebase 為空，寫入預設資料
                 if (!snapshot.val()) {
                     await set(ref(db, '/cabinetData'), data);
                     console.log('已將預設資料寫入 Firebase');
@@ -286,8 +291,8 @@
                         return acc;
                     }, {})
                 };
-                await set(ref(db, '/cabinetData'), data);
                 console.log('已初始化預設資料:', data);
+                await set(ref(db, '/cabinetData'), data);
             }
         }
 
@@ -298,35 +303,30 @@
                 console.log('資料儲存成功');
             } catch (error) {
                 console.error('儲存失敗:', error);
-                alert('儲存資料時發生錯誤，請檢查網路連線或稍後再試！');
             }
         }
 
         // 即時同步
         onValue(ref(db, '/cabinetData'), (snapshot) => {
-            try {
-                const updatedData = snapshot.val();
-                if (updatedData && JSON.stringify(updatedData) !== JSON.stringify(data)) {
-                    data = updatedData;
-                    console.log('資料已同步:', data);
-                    Object.keys(data.locations).forEach(locId => {
-                        if (!data.locations[locId].areas) {
-                            data.locations[locId].areas = {};
+            const updatedData = snapshot.val();
+            if (updatedData && JSON.stringify(updatedData) !== JSON.stringify(data)) {
+                data = updatedData;
+                console.log('資料已同步:', data);
+                // 確保同步後重新檢查 areas 和 cabinets
+                Object.keys(data.locations).forEach(locId => {
+                    if (!data.locations[locId].areas) {
+                        data.locations[locId].areas = {};
+                    }
+                    Object.keys(data.locations[locId].areas).forEach(areaId => {
+                        if (!data.locations[locId].areas[areaId].cabinets) {
+                            data.locations[locId].areas[areaId].cabinets = {};
                         }
-                        Object.keys(data.locations[locId].areas).forEach(areaId => {
-                            if (!data.locations[locId].areas[areaId].cabinets) {
-                                data.locations[locId].areas[areaId].cabinets = {};
-                            }
-                        });
                     });
-                    if (currentCabinetId) renderCells();
-                    else if (currentAreaId) renderCabinets();
-                    else if (currentLocationId) renderAreasPage();
-                    else renderLocationsPage();
-                }
-            } catch (error) {
-                console.error('同步資料失敗:', error);
-                alert('資料同步失敗，請檢查網路連線或重新整理頁面！');
+                });
+                if (currentCabinetId) renderCells();
+                else if (currentAreaId) renderCabinets();
+                else if (currentLocationId) renderAreasPage();
+                else renderLocationsPage();
             }
         });
 
@@ -453,7 +453,7 @@
             } else if (type === 'U' || type === 'square') {
                 const sides = type === 'U' ? 3 : 4;
                 for (let i = 1; i <= sides; i++) {
-                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[`side${i}`] || ''}">`;
+                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[\`side${i}\`] || ''}">`;
                 }
             }
         }
@@ -679,7 +679,7 @@
             list.innerHTML = items.map((item, idx) => `
                 <tr class="border-b">
                     <td class="p-2">
-                        ${item.image ? `<img src="${item.image}" class="item-image" data-image="${encodeURIComponent(item.image)}">` : '無圖片'}
+                        ${item.image ? `<img src="${item.image}" class="item-image" onclick="previewImage('${item.image.replace(/"/g, '\\"')}')">` : '無圖片'}
                     </td>
                     <td class="p-2">${item.name}</td>
                     <td class="p-2">${item.quantity || ''}</td>
@@ -688,9 +688,9 @@
                     <td class="p-2">${item.purchasePlace || ''}</td>
                     <td class="p-2">${item.notes || ''}</td>
                     <td class="p-2">
-                        <button class="edit-item text-blue-500 mr-1" data-index="${idx}">編輯</button>
-                        ${item.image ? `<button class="remove-image text-blue-500 mr-1" data-index="${idx}">刪除圖片</button>` : ''}
-                        <button class="delete-item text-red-500" data-index="${idx}">刪除</button>
+                        <button onclick="editItem(${idx})" class="text-blue-500 mr-1">編輯</button>
+                        ${item.image ? `<button onclick="removeImage(${idx})" class="text-blue-500 mr-1">刪除圖片</button>` : ''}
+                        <button onclick="deleteItem(${idx})" class="text-red-500">刪除</button>
                     </td>
                 </tr>
             `).join('');
@@ -702,17 +702,13 @@
         }
 
         function editItem(index) {
-            console.log('編輯物品，索引:', index);
             const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
             if (!cab || !cab.cells_data?.[currentCellId]) {
                 alert('儲存格資料缺失，請重新選擇！');
                 return;
             }
             const item = cab.cells_data[currentCellId].items[index];
-            if (!item) {
-                alert('物品資料不存在！');
-                return;
-            }
+            if (!item) return;
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemQty').value = item.quantity || '';
             document.getElementById('itemInDate').value = item.entryDate || '';
@@ -721,30 +717,81 @@
             document.getElementById('itemNote').value = item.notes || '';
             document.getElementById('itemFormSubmit').textContent = '更新物品';
             editingItemIndex = index;
-            document.getElementById('itemModal').classList.remove('hidden');
         }
 
         async function removeImage(index) {
-            console.log('刪除照片，索引:', index);
             if (confirm('確定要刪除這張照片嗎？物品其他資訊將保留。')) {
-                const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
-                if (!cab || !cab.cells_data?.[currentCellId]) {
-                    alert('儲存格資料缺失，請重新選擇！');
-                    return;
+                const cab = data.locations[currentLocationId].areas[currentAreaId].cabinets[currentCabinetId];
+                const item = cab.cells_data[currentCellId]?.items[index];
+                if (item) {
+                    item.image = '';
+                    await saveData();
+                    openItemModal(currentCellId);
                 }
-                const item = cab.cells_data[currentCellId].items[index];
-                if (!item) {
-                    alert('物品資料不存在！');
-                    return;
-                }
-                item.image = '';
-                await saveData();
-                openItemModal(currentCellId);
             }
         }
 
+        function previewImage(imageSrc) {
+            document.getElementById('previewImage').src = imageSrc;
+            document.getElementById('imagePreviewModal').classList.remove('hidden');
+        }
+
+        document.getElementById('itemForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const item = {
+                name: document.getElementById('itemName').value.trim(),
+                quantity: document.getElementById('itemQty').value || '',
+                entryDate: document.getElementById('itemInDate').value || '',
+                expiryDate: document.getElementById('itemExpDate').value || '',
+                purchasePlace: document.getElementById('itemPlace').value || '',
+                notes: document.getElementById('itemNote').value || '',
+                image: ''
+            };
+            if (!item.name) {
+                alert('物品名稱為必填！');
+                return;
+            }
+            const imageInput = document.getElementById('itemImage');
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab) {
+                alert('櫃體資料缺失，請返回重新選擇');
+                return;
+            }
+            if (!cab.cells_data) cab.cells_data = {};
+            if (!cab.cells_data[currentCellId]) {
+                cab.cells_data[currentCellId] = { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
+            }
+            const cell = cab.cells_data[currentCellId];
+            const items = cell.items || [];
+
+            const processItem = async (newImage) => {
+                item.image = newImage || (editingItemIndex > -1 ? items[editingItemIndex]?.image || '' : '');
+                if (editingItemIndex > -1) {
+                    items[editingItemIndex] = item;
+                } else {
+                    items.push(item);
+                }
+                cell.text = items.map(i => i.name).join(', ');
+                cell.items = items;
+                await saveData();
+                document.getElementById('itemForm').reset();
+                document.getElementById('itemModal').classList.add('hidden');
+                renderCells();
+                checkReminders();
+                editingItemIndex = -1;
+            };
+
+            if (imageInput.files && imageInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => processItem(e.target.result);
+                reader.onerror = () => alert('圖片讀取失敗，請重試！');
+                reader.readAsDataURL(imageInput.files[0]);
+            } else {
+                await processItem('');
+            }
+        });
+
         async function deleteItem(index) {
-            console.log('刪除物品，索引:', index);
             if (confirm('確定要刪除這個物品嗎？')) {
                 const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
                 if (!cab || !cab.cells_data?.[currentCellId]) {
@@ -845,6 +892,7 @@
             let id = name.toLowerCase().replace(/\s/g, '-');
             const oldId = document.getElementById('addInput').dataset.oldId || '';
 
+            // 確保資料結構初始化
             if (currentLocationId && !data.locations[currentLocationId]) {
                 data.locations[currentLocationId] = { name: currentLocationId, areas: {} };
             }
@@ -881,6 +929,7 @@
                 const type = document.getElementById('cabinetType').value;
                 const inputElements = document.querySelectorAll('#dimensionsInputs input');
                 let dimensions = {};
+                let sides = 1;
 
                 if (type === 'L') {
                     dimensions = {
@@ -891,11 +940,16 @@
                         alert('L型櫃體規格格式錯誤，請輸入如 3x3 的格式！');
                         return;
                     }
+                    sides = 2;
+                    // 處理 L 型櫃體：建立兩個子櫃體
                     const shortId = `${id}-short`;
                     const longId = `${id}-long`;
                     const shortName = `${name} 短`;
                     const longName = `${name} 長`;
+
+                    // 如果是編輯，保留現有 cells_data
                     const existingCells = editingCabinet && data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId]?.cells_data || {};
+
                     data.locations[currentLocationId].areas[currentAreaId].cabinets[shortId] = {
                         name: shortName,
                         type,
@@ -908,11 +962,13 @@
                         dimensions: { size: dimensions.long },
                         cells_data: {}
                     };
+
+                    // 如果是編輯，刪除舊櫃體
                     if (editingCabinet && editingCabinetId && editingCabinetId !== shortId && editingCabinetId !== longId) {
                         delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
                     }
                 } else if (type === 'U' || type === 'square') {
-                    const sides = type === 'U' ? 3 : 4;
+                    sides = type === 'U' ? 3 : 4;
                     for (let i = 0; i < sides; i++) {
                         const sideDim = inputElements[i]?.value.trim() || '';
                         if (!validateDimension(sideDim)) {
@@ -929,10 +985,12 @@
                             cells_data: existingCells
                         };
                     }
+                    // 如果是編輯，刪除舊櫃體
                     if (editingCabinet && editingCabinetId) {
                         delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
                     }
                 } else {
+                    // 一字形
                     dimensions.size = inputElements[0]?.value.trim() || '';
                     if (!validateDimension(dimensions.size)) {
                         alert('櫃體規格格式錯誤，請輸入如 3x3 的格式！');
@@ -1060,89 +1118,45 @@
             }, 100);
         }
 
-        document.getElementById('itemForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const item = {
-                name: document.getElementById('itemName').value.trim(),
-                quantity: document.getElementById('itemQty').value || '',
-                entryDate: document.getElementById('itemInDate').value || '',
-                expiryDate: document.getElementById('itemExpDate').value || '',
-                purchasePlace: document.getElementById('itemPlace').value || '',
-                notes: document.getElementById('itemNote').value || '',
-                image: ''
-            };
-            if (!item.name) {
-                alert('物品名稱為必填！');
-                return;
-            }
-            const imageInput = document.getElementById('itemImage');
-            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
-            if (!cab) {
-                alert('櫃體資料缺失，請返回重新選擇');
-                return;
-            }
-            if (!cab.cells_data) cab.cells_data = {};
-            if (!cab.cells_data[currentCellId]) {
-                cab.cells_data[currentCellId] = { items: [], merged: false, span: { row: 1, col: 1 }, text: '' };
-            }
-            const cell = cab.cells_data[currentCellId];
-            const items = cell.items || [];
-
-            const processItem = async (newImage) => {
-                item.image = newImage || (editingItemIndex > -1 ? items[editingItemIndex]?.image || '' : '');
-                if (editingItemIndex > -1) {
-                    items[editingItemIndex] = item;
-                } else {
-                    items.push(item);
-                }
-                cell.text = items.map(i => i.name).join(', ');
-                cell.items = items;
-                await saveData();
-                document.getElementById('itemForm').reset();
-                document.getElementById('itemModal').classList.add('hidden');
-                renderCells();
-                checkReminders();
-                editingItemIndex = -1;
-            };
-
-            if (imageInput.files && imageInput.files[0]) {
-                const reader = new FileReader();
-                reader.onload = (e) => processItem(e.target.result);
-                reader.onerror = () => alert('圖片讀取失敗，請重試！');
-                reader.readAsDataURL(imageInput.files[0]);
-            } else {
-                await processItem('');
+        // 事件委託綁定
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('backToLocations')) {
+                currentLocationId = null;
+                currentAreaId = null;
+                currentCabinetId = null;
+                renderLocationsPage();
+            } else if (e.target.classList.contains('backToAreas')) {
+                currentAreaId = null;
+                currentCabinetId = null;
+                renderAreasPage();
+            } else if (e.target.classList.contains('backToCabinets')) {
+                currentCabinetId = null;
+                document.getElementById('cellsPage').classList.add('hidden');
+                document.getElementById('cabinetsPage').classList.remove('hidden');
+                renderCabinets();
+            } else if (e.target.closest('.location-card')) {
+                const locId = e.target.closest('.location-card').dataset.locId;
+                if (locId) enterLocation(locId);
+            } else if (e.target.closest('.edit-location')) {
+                const locId = e.target.closest('.edit-location').dataset.locId;
+                if (locId) editLocation(locId, e);
+            } else if (e.target.closest('.area-card')) {
+                const areaId = e.target.closest('.area-card').dataset.areaId;
+                if (areaId) enterArea(areaId);
+            } else if (e.target.closest('.edit-area')) {
+                const areaId = e.target.closest('.edit-area').dataset.areaId;
+                if (areaId) editArea(areaId, e);
+            } else if (e.target.closest('.view-cabinet')) {
+                const cabId = e.target.closest('.view-cabinet').dataset.cabId;
+                if (cabId) enterCabinet(cabId);
+            } else if (e.target.closest('.edit-cabinet')) {
+                const cabId = e.target.closest('.edit-cabinet').dataset.cabId;
+                if (cabId) editCabinet(cabId, e);
+            } else if (e.target.closest('.delete-cabinet')) {
+                const cabId = e.target.closest('.delete-cabinet').dataset.cabId;
+                if (cabId) deleteCabinet(cabId, e);
             }
         });
-
-        // 物品列表事件委託
-        document.getElementById('itemsList').addEventListener('click', (e) => {
-            const target = e.target;
-            const index = parseInt(target.dataset.index);
-            if (target.classList.contains('edit-item')) {
-                editItem(index);
-            } else if (target.classList.contains('remove-image')) {
-                removeImage(index);
-            } else if (target.classList.contains('delete-item')) {
-                deleteItem(index);
-            } else if (target.classList.contains('item-image')) {
-                previewImage(decodeURIComponent(target.dataset.image));
-            }
-        });
-
-        // 排序事件委託
-        document.getElementById('itemsTable').addEventListener('click', (e) => {
-            const target = e.target.closest('th[data-sort]');
-            if (target) {
-                const field = target.dataset.sort;
-                sortItems(field);
-            }
-        });
-
-        function previewImage(imageSrc) {
-            document.getElementById('previewImage').src = imageSrc;
-            document.getElementById('imagePreviewModal').classList.remove('hidden');
-        }
 
         document.getElementById('editGridBtn').addEventListener('click', async () => {
             editMode = !editMode;
@@ -1234,6 +1248,7 @@
                     if (!importedData.locations || typeof importedData.locations !== 'object') {
                         throw new Error('無效的資料結構');
                     }
+                    // 驗證並修復匯入數據
                     Object.keys(importedData.locations).forEach(locId => {
                         if (!importedData.locations[locId].areas) {
                             importedData.locations[locId].areas = {};
@@ -1263,23 +1278,13 @@
             reader.readAsText(file);
         });
 
-        // 事件委託綁定
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('backToLocations')) {
-                currentLocationId = null;
-                currentAreaId = null;
-                currentCabinetId = null;
-                renderLocationsPage();
-            } else if (e.target.classList.contains('backToAreas')) {
-                currentAreaId = null;
-                currentCabinetId = null;
-                renderAreasPage();
-            } else if (e.target.classList.contains('backToCabinets')) {
-                currentCabinetId = null;
-                document.getElementById('cellsPage').classList.add('hidden');
-                document.getElementById('cabinetsPage').classList.remove('hidden');
-                renderCabinets();
-            } else if (e.target.closest('.location-card')) {
-                const locId = e.target.closest('.location-card').dataset.locId;
-                if (locId) enterLocation(locId);
-            } else if (
+        // 初始化載入
+        async function init() {
+            await loadData();
+            renderLocationsPage();
+            checkReminders();
+        }
+        init();
+    </script>
+</body>
+</html>
