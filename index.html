@@ -6,28 +6,10 @@
     <title>櫃體置物管理應用程式</title>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDK -->
-    <script type="module">
-      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
-      import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
-      
-      // 替換為你的 Firebase 配置（從 Firebase Console 取得）
-      const firebaseConfig = {
-        apiKey: "AIzaSyDxJCKSvrB3a6tYtzV9Q90p68odxaqQcXw",
-        authDomain: "cabinet-sync-db.firebaseapp.com",
-        databaseURL: "https://cabinet-sync-db-default-rtdb.firebaseio.com",
-        projectId: "cabinet-sync-db",
-        storageBucket: "cabinet-sync-db.firebasestorage.app",
-        messagingSenderId: "209194186803",
-        appId: "1:209194186803:web:6498fd5c812ea419e5cb46"
-      };
-      
-      const app = initializeApp(firebaseConfig);
-      const db = getDatabase(app);
-      window.db = db; // 暴露給其他 JS 使用
-    </script>
     <script>
         tailwind.config = {
             theme: {
@@ -211,7 +193,24 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
+        import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
+
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyDxJCKSvrB3a6tYtzV9Q90p68odxaqQcXw",
+            authDomain: "cabinet-sync-db.firebaseapp.com",
+            databaseURL: "https://cabinet-sync-db-default-rtdb.firebaseio.com",
+            projectId: "cabinet-sync-db",
+            storageBucket: "cabinet-sync-db.firebasestorage.app",
+            messagingSenderId: "209194186803",
+            appId: "1:209194186803:web:6498fd5c812ea419e5cb46"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
         // 預設地點與區域
         const defaultLocations = [
             { name: '家裡', areas: ['客廳', '廚房', '玄關', '浴室', '樓下房間', '書房', '樓上小孩房', '主臥室'] },
