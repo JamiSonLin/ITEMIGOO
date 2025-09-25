@@ -6,8 +6,22 @@
     <title>櫃體置物管理應用程式</title>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- 本地 Tailwind CSS -->
-    <link href="/css/output.css" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        primary: '#3B82F6', // 藍色
+                        secondary: '#6B7280', // 灰色
+                        accent: '#F59E0B' // 橘色提醒
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 <body class="bg-gray-50 min-h-screen p-4 font-sans">
     <!-- 搜尋與篩選區 -->
@@ -125,6 +139,55 @@
             <button id="closeReminder" class="px-4 py-2 bg-primary text-white rounded">確認</button>
         </div>
     </div>
+
+    <style>
+        .grid-cell {
+            border: 1px solid #d1d5db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-align: center;
+            min-height: 50px;
+        }
+        .merged { background-color: #f3f4f6; }
+        .selected { background-color: #bfdbfe !important; }
+        .scroll-container {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 2px;
+            width: 100%;
+            font-size: 0.75rem;
+            scrollbar-width: thin;
+            scrollbar-color: #6B7280 #e5e7eb;
+        }
+        .scroll-container::-webkit-scrollbar {
+            height: 6px;
+        }
+        .scroll-container::-webkit-scrollbar-track {
+            background: #e5e7eb;
+        }
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: #6B7280;
+            border-radius: 3px;
+        }
+        .scroll-item {
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .item-image {
+            max-width: 50px;
+            max-height: 50px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .modal-image {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+        }
+    </style>
 
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
