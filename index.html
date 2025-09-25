@@ -453,7 +453,7 @@
             } else if (type === 'U' || type === 'square') {
                 const sides = type === 'U' ? 3 : 4;
                 for (let i = 1; i <= sides; i++) {
-                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[`side${i}`] || ''}">`;
+                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[\`side${i}\`] || ''}">`;
                 }
             }
         }
@@ -687,10 +687,12 @@
                     <td class="p-2">${item.expiryDate || ''}</td>
                     <td class="p-2">${item.purchasePlace || ''}</td>
                     <td class="p-2">${item.notes || ''}</td>
-                    <td class="p-2">
-                        <button class="edit-item text-blue-500 mr-1" data-index="${idx}">編輯</button>
-                        ${item.image ? `<button class="remove-image text-blue-500 mr-1" data-index="${idx}">刪除圖片</button>` : ''}
-                        <button class="delete-item text-red-500" data-index="${idx}">刪除</button>
+                    <td class="p-2 flex flex-wrap gap-1">
+                        <button class="edit-item text-blue-500 hover:underline" data-index="${idx}">編輯</button>
+                        ${item.image ? `<button class="remove-image text-blue-500 hover:underline" data-index="${idx}">刪除圖片</button>` : ''}
+                        <button class="delete-item text-red-500 hover:underline" data-index="${idx}">刪除</button>
+                        <button class="move-up text-green-500 hover:underline ${idx === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-index="${idx}" ${idx === 0 ? 'disabled' : ''}>上移</button>
+                        <button class="move-down text-green-500 hover:underline ${idx === items.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}" data-index="${idx}" ${idx === items.length - 1 ? 'disabled' : ''}>下移</button>
                     </td>
                 </tr>
             `).join('');
@@ -763,6 +765,42 @@
                 await saveData();
                 openItemModal(currentCellId);
             }
+        }
+
+        async function moveItemUp(index) {
+            console.log('上移物品，索引:', index);
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab || !cab.cells_data?.[currentCellId]) {
+                alert('儲存格資料缺失，請重新選擇！');
+                return;
+            }
+            const items = cab.cells_data[currentCellId].items;
+            if (index <= 0 || index >= items.length) {
+                alert('無法上移，物品已在頂部或索引無效！');
+                return;
+            }
+            [items[index], items[index - 1]] = [items[index - 1], items[index]];
+            cab.cells_data[currentCellId].text = items.map(item => item.name).join(', ');
+            await saveData();
+            openItemModal(currentCellId);
+        }
+
+        async function moveItemDown(index) {
+            console.log('下移物品，索引:', index);
+            const cab = data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[currentCabinetId];
+            if (!cab || !cab.cells_data?.[currentCellId]) {
+                alert('儲存格資料缺失，請重新選擇！');
+                return;
+            }
+            const items = cab.cells_data[currentCellId].items;
+            if (index < 0 || index >= items.length - 1) {
+                alert('無法下移，物品已在底部或索引無效！');
+                return;
+            }
+            [items[index], items[index + 1]] = [items[index + 1], items[index]];
+            cab.cells_data[currentCellId].text = items.map(item => item.name).join(', ');
+            await saveData();
+            openItemModal(currentCellId);
         }
 
         async function sortItems(field) {
@@ -930,7 +968,7 @@
                         };
                     }
                     if (editingCabinet && editingCabinetId) {
-                        delete data.locations[currentLocationId]?.areas[currentAreaId]?.cabinets[editingCabinetId];
+                        delete data.locations[currentLocationId].areas[currentAreaId].cabinets[editingCabinetId];
                     }
                 } else {
                     dimensions.size = inputElements[0]?.value.trim() || '';
@@ -1127,6 +1165,10 @@
                 deleteItem(index);
             } else if (target.classList.contains('item-image')) {
                 previewImage(decodeURIComponent(target.dataset.image));
+            } else if (target.classList.contains('move-up')) {
+                moveItemUp(index);
+            } else if (target.classList.contains('move-down')) {
+                moveItemDown(index);
             }
         });
 
