@@ -6,70 +6,8 @@
     <title>櫃體置物管理應用程式</title>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS CDN (開發用, 生產環境建議安裝本地版本) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        primary: '#3B82F6', // 藍色
-                        secondary: '#6B7280', // 灰色
-                        accent: '#F59E0B' // 橘色提醒
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        .grid-cell {
-            border: 1px solid #d1d5db;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            text-align: center;
-            min-height: 50px;
-        }
-        .merged { background-color: #f3f4f6; }
-        .selected { background-color: #bfdbfe !important; }
-        .scroll-container {
-            display: flex;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding: 2px;
-            width: 100%;
-            font-size: 0.75rem;
-            scrollbar-width: thin;
-            scrollbar-color: #6B7280 #e5e7eb;
-        }
-        .scroll-container::-webkit-scrollbar {
-            height: 6px;
-        }
-        .scroll-container::-webkit-scrollbar-track {
-            background: #e5e7eb;
-        }
-        .scroll-container::-webkit-scrollbar-thumb {
-            background: #6B7280;
-            border-radius: 3px;
-        }
-        .scroll-item {
-            display: inline-block;
-            margin-right: 8px;
-        }
-        .item-image {
-            max-width: 50px;
-            max-height: 50px;
-            object-fit: cover;
-            cursor: pointer;
-        }
-        .modal-image {
-            max-width: 100%;
-            max-height: 300px;
-            object-fit: contain;
-        }
-    </style>
+    <!-- 本地 Tailwind CSS -->
+    <link href="/css/output.css" rel="stylesheet">
 </head>
 <body class="bg-gray-50 min-h-screen p-4 font-sans">
     <!-- 搜尋與篩選區 -->
@@ -341,9 +279,8 @@
                 <div class="bg-white p-4 rounded-lg shadow-md cursor-pointer hover:shadow-lg location-card" data-loc-id="${id}">
                     <h3 class="text-lg font-medium">${loc.name}</h3>
                     <button class="edit-location float-right text-secondary hover:text-primary" data-loc-id="${id}">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
                         </svg>
                     </button>
                 </div>
@@ -385,9 +322,8 @@
                         <div class="bg-white p-4 rounded-lg shadow-md cursor-pointer hover:shadow-lg area-card" data-area-id="${id}">
                             <h3 class="text-lg font-medium">${area.name}</h3>
                             <button class="edit-area float-right text-secondary hover:text-primary" data-area-id="${id}">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
                                 </svg>
                             </button>
                         </div>
@@ -453,7 +389,7 @@
             } else if (type === 'U' || type === 'square') {
                 const sides = type === 'U' ? 3 : 4;
                 for (let i = 1; i <= sides; i++) {
-                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[\`side${i}\`] || ''}">`;
+                    inputs.innerHTML += `<input type="text" placeholder="面${i}規格 (e.g., 3x3 or 3X3)" class="w-full p-2 border rounded mb-2" value="${dimensions[`side${i}`] || ''}">`;
                 }
             }
         }
