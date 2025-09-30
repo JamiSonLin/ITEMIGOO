@@ -72,34 +72,41 @@
 
     <!-- 物品詳情模態 -->
     <div id="itemModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-lg max-h-[80vh] overflow-y-auto">
-            <h4 id="modalTitle" class="text-lg font-semibold mb-4"></h4>
-            <table id="itemsTable" class="w-full mb-4 border-collapse">
-                <thead>
-                    <tr class="bg-gray-100">
-                        <th class="p-2">圖片</th>
-                        <th class="p-2 cursor-pointer" data-sort="name">名稱</th>
-                        <th class="p-2 cursor-pointer" data-sort="quantity">數量</th>
-                        <th class="p-2 cursor-pointer" data-sort="entryDate">存入日期</th>
-                        <th class="p-2 cursor-pointer" data-sort="expiryDate">有效日期</th>
-                        <th class="p-2 cursor-pointer" data-sort="purchasePlace">購買地</th>
-                        <th class="p-2">備註</th>
-                        <th class="p-2">操作</th>
-                    </tr>
-                </thead>
-                <tbody id="itemsList"></tbody>
-            </table>
-            <form id="itemForm" class="space-y-2">
-                <input id="itemName" type="text" placeholder="物品名稱 (必填)" class="w-full p-2 border rounded" required>
-                <input id="itemQty" type="number" placeholder="數量" class="w-full p-2 border rounded">
-                <input id="itemInDate" type="date" placeholder="存入日期" class="w-full p-2 border rounded">
-                <input id="itemExpDate" type="date" placeholder="有效日期" class="w-full p-2 border rounded">
-                <input id="itemPlace" type="text" placeholder="購買地" class="w-full p-2 border rounded">
-                <textarea id="itemNote" placeholder="備註" class="w-full p-2 border rounded"></textarea>
-                <input id="itemImage" type="file" accept="image/*" class="w-full p-2 border rounded">
-                <button type="submit" id="itemFormSubmit" class="px-4 py-2 bg-primary text-white rounded">新增物品</button>
-            </form>
-            <button id="closeModal" class="mt-4 px-4 py-2 bg-secondary text-white rounded float-right">關閉</button>
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-4xl max-h-[80vh] overflow-hidden flex">
+            <!-- 左側：物品列表 -->
+            <div class="w-1/2 pr-4 overflow-y-auto">
+                <h4 id="modalTitle" class="text-lg font-semibold mb-4"></h4>
+                <table id="itemsTable" class="w-full mb-4 border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="p-2">圖片</th>
+                            <th class="p-2 cursor-pointer" data-sort="name">名稱</th>
+                            <th class="p-2 cursor-pointer" data-sort="quantity">數量</th>
+                            <th class="p-2 cursor-pointer" data-sort="entryDate">存入日期</th>
+                            <th class="p-2 cursor-pointer" data-sort="expiryDate">有效日期</th>
+                            <th class="p-2 cursor-pointer" data-sort="purchasePlace">購買地</th>
+                            <th class="p-2">備註</th>
+                            <th class="p-2">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsList"></tbody>
+                </table>
+            </div>
+            <!-- 右側：新增物品表單 -->
+            <div class="w-1/2 pl-4 border-l border-gray-200">
+                <h4 class="text-lg font-semibold mb-4">新增/編輯物品</h4>
+                <form id="itemForm" class="space-y-2">
+                    <input id="itemName" type="text" placeholder="物品名稱 (必填)" class="w-full p-2 border rounded" required>
+                    <input id="itemQty" type="number" placeholder="數量" class="w-full p-2 border rounded">
+                    <input id="itemInDate" type="date" placeholder="存入日期" class="w-full p-2 border rounded">
+                    <input id="itemExpDate" type="date" placeholder="有效日期" class="w-full p-2 border rounded">
+                    <input id="itemPlace" type="text" placeholder="購買地" class="w-full p-2 border rounded">
+                    <textarea id="itemNote" placeholder="備註" class="w-full p-2 border rounded"></textarea>
+                    <input id="itemImage" type="file" accept="image/*" class="w-full p-2 border rounded">
+                    <button type="submit" id="itemFormSubmit" class="px-4 py-2 bg-primary text-white rounded">新增物品</button>
+                </form>
+                <button id="closeModal" class="mt-4 px-4 py-2 bg-secondary text-white rounded float-right">關閉</button>
+            </div>
         </div>
     </div>
 
@@ -696,7 +703,7 @@
                 </tr>
             `).join('');
             document.getElementById('itemForm').reset();
-            document.getElementById('itemName').value = cellData.text || '';
+            document.getElementById('itemName').value = ''; // 確保物品名稱欄位預設為空白
             document.getElementById('itemFormSubmit').textContent = '新增物品';
             editingItemIndex = -1;
             document.getElementById('itemModal').classList.remove('hidden');
