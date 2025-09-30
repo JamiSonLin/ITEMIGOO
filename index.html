@@ -93,7 +93,7 @@
                 </table>
             </div>
             <!-- 右側：新增物品表單 -->
-            <div class="w-1/2 pl-4 border-l border-gray-200">
+            <div class="w-1/2 pl-4 border-l border-gray-200 overflow-y-auto">
                 <h4 class="text-lg font-semibold mb-4">新增/編輯物品</h4>
                 <form id="itemForm" class="space-y-2">
                     <input id="itemName" type="text" placeholder="物品名稱 (必填)" class="w-full p-2 border rounded" required>
@@ -960,7 +960,7 @@
                     for (let i = 0; i < sides; i++) {
                         const sideDim = inputElements[i]?.value.trim() || '';
                         if (!validateDimension(sideDim)) {
-                            alert(`面${i + 1}規格格式錯誤，請輸入如 3x3 的格式！`);
+                            alert(`面${i + 1}規格格式錯誤，請輸入如 3x3 的格式！');
                             return;
                         }
                         const sideId = `${id}-side${i + 1}`;
@@ -1062,7 +1062,13 @@
                             const items = cell.items || [];
                             items.forEach(item => {
                                 if (item.expiryDate && (new Date(item.expiryDate) - today) / (1000 * 60 * 60 * 24) < 30) {
-                                    reminders.push({ location: loc.name, area: area.name, cabinet: cab.name, cellId, item: item.name });
+                                    reminders.push({ 
+                                        location: loc.name.replace(/'/g, "\\'"), // 轉義單引號
+                                        area: area.name.replace(/'/g, "\\'"), 
+                                        cabinet: cab.name.replace(/'/g, "\\'"), 
+                                        cellId, 
+                                        item: item.name.replace(/'/g, "\\'") 
+                                    });
                                 }
                             });
                         });
